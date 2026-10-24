@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ひといき — 入れ方</title>
+<meta name="description" content="AI とのやり取りの中身から脳への負担を計算し、区切りのいい瞬間にひと休みを提案する Chrome / VS Code 拡張">
+<style>
+  :root {
+    --bg: #f7f6f2; --card: #ffffff; --text: #22252a; --muted: #5d6470;
+    --line: #e2dfd6; --accent: #2f7d6d; --accent-text: #ffffff; --code: #f0eee8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17191c; --card: #202328; --text: #e8e9eb; --muted: #a2a8b2;
+      --line: #33373e; --accent: #5fb8a5; --accent-text: #10201c; --code: #2a2e34;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.75 -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 32px; margin: 0 0 4px; letter-spacing: .02em; }
+  h2 { font-size: 21px; margin: 40px 0 12px; }
+  h3 { font-size: 17px; margin: 20px 0 8px; }
+  p { margin: 8px 0; }
+  .lead { color: var(--muted); margin-bottom: 20px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin: 16px 0; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 12px; margin: 16px 0; }
+  .btn { display: inline-block; background: var(--accent); color: var(--accent-text); text-decoration: none;
+    padding: 12px 18px; border-radius: 10px; font-weight: 600; }
+  .btn.sub { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+  ol { padding-left: 1.4em; margin: 8px 0; }
+  li { margin: 6px 0; }
+  code { background: var(--code); padding: 1px 6px; border-radius: 4px; font-size: 14px; word-break: break-all; }
+  .note { color: var(--muted); font-size: 14px; }
+  .pc-only { border-left: 4px solid var(--accent); padding: 10px 14px; background: var(--card); border-radius: 0 8px 8px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 8px 6px; text-align: left; vertical-align: top; }
+  footer { margin-top: 48px; color: var(--muted); font-size: 14px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>ひといき</h1>
+  <p class="lead">AI とのやり取りの中身から「脳にかかる負担の目安」をためて、作業の区切りのいい瞬間に「ひと休み」を提案する拡張機能です。JPHACKS 2026 東京B「がくんとるーは」</p>
+
+  <p class="pc-only"><strong>パソコンで開いてください。</strong> スマホで QR コードを読んだ方は、このページの URL をパソコンに送ってください。<br><code>https://jphacks.github.io/tkb_2603-demo/</code></p>
+
+  <div class="buttons">
+    <a class="btn" href="https://github.com/jphacks/tkb_2603/releases/latest/download/hitoiki-chrome.zip">Chrome 版をダウンロード</a>
+    <a class="btn" href="https://github.com/jphacks/tkb_2603/releases/latest/download/hitoiki-vscode.vsix">VS Code 版をダウンロード</a>
+  </div>
+
+  <h2>何をするもの?</h2>
+  <div class="card">
+    <ol>
+      <li>AI とのやり取りから、<strong>読む量・判断を求められた回数・確認や検証(エラーとの格闘)・話題の切替・作業時間</strong>の 5 つを取ります</li>
+      <li>中身が重いほど速く、器に負担がたまります(時間だけでは決めません)</li>
+      <li>器が 80% を超えたら、生成中でも入力中でもない<strong>区切りのいい瞬間</strong>に、理由つきで休憩を提案します</li>
+      <li>休憩は自分で始めます。「戻ったらやること」を 1 行メモでき、戻るとそのメモが出ます</li>
+    </ol>
+  </div>
+
+  <h2>Chrome 版の入れ方</h2>
+  <p>対応: ChatGPT(chatgpt.com)。Claude(claude.ai)・Gemini(gemini.google.com)は試験対応です</p>
+  <div class="card">
+    <ol>
+      <li>上の「Chrome 版をダウンロード」で <code>hitoiki-chrome.zip</code> を保存し、ダブルクリックで展開する(フォルダができます)</li>
+      <li>Chrome のアドレス欄に <code>chrome://extensions</code> と入れて開く</li>
+      <li>右上の「<strong>デベロッパー モード</strong>」をオンにする</li>
+      <li>「<strong>パッケージ化されていない拡張機能を読み込む</strong>」を押し、展開したフォルダ(中に <code>manifest.json</code> があるフォルダ)を選ぶ</li>
+      <li>ChatGPT などを開くと、画面の右下(入力欄の少し上)に「ひといき」が出ます。開いていたタブは再読み込みしてください</li>
+    </ol>
+    <p class="note">展開したフォルダは消さずに置いておいてください(消すと拡張も動かなくなります)。Chrome の起動時に「デベロッパー モードの拡張機能を無効にする」という案内が出ることがあります。そのときは「無効にする」を押さずに閉じてください。</p>
+  </div>
+
+  <h2>VS Code 版の入れ方</h2>
+  <div class="card">
+    <ol>
+      <li>上の「VS Code 版をダウンロード」で <code>hitoiki-vscode.vsix</code> を保存する</li>
+      <li>VS Code で <code>Cmd + Shift + P</code>(Windows は <code>Ctrl + Shift + P</code>)を押す</li>
+      <li>「<strong>Extensions: Install from VSIX...</strong>」を選び、保存した <code>.vsix</code> を選ぶ</li>
+      <li>画面の右下(ステータスバー)に「ひといき 0%」が出れば完了です</li>
+    </ol>
+    <p class="note">失敗したコマンドを数えるのは、ターミナル(シェル統合が有効なもの)とタスクで動かしたものです。ウィンドウは 1 つで使ってください。</p>
+  </div>
+
+  <h2>使い方</h2>
+  <div class="card">
+    <table>
+      <tr><th>場面</th><th>すること</th></tr>
+      <tr><td>ふだん</td><td>いつもどおり AI と作業するだけ。器の % と内訳が見られます</td></tr>
+      <tr><td>提案が出たら</td><td>Chrome: 「今○分休む」か「区切りがついたら休む」(後で右下のボタンから始める)<br>VS Code: 「今休む」「次の区切りで」「今回は不要」</td></tr>
+      <tr><td>休憩中</td><td>タイマーとストレッチの案内が出ます。器が下がります。Chrome は休憩中の画面で、VS Code は休む前に「戻ったらやること」をメモできます</td></tr>
+      <tr><td>止めたい</td><td>Chrome は拡張の設定画面で計測を止められ、記録も消せます。VS Code は拡張を無効にします</td></tr>
+    </table>
+  </div>
+
+  <h2>データの扱い</h2>
+  <div class="card">
+    <ul>
+      <li>会話の本文は拡張に保存しません。記録は件数・文字数・時刻・操作だけで、パソコンの中にだけ残ります</li>
+      <li>判断・確認を会話の中身から読み取る機能(Anthropic の API を使う)は、設定画面で自分の API キーを入れたときだけ動き、そのときは 1 往復ごとに本文を Anthropic の API に送ります。キーはこのパソコンのブラウザの中にだけ保存され、分類の費用はキーの持ち主にかかります(モデルは設定画面で変えられます)。キーが無いときは何も送らず、エラーの貼り付けや会話の切替などの手がかりだけで動きます(「判断」は未計測になります)</li>
+      <li>VS Code 版は、エディタやターミナルの出来事だけを使い、外へは何も送りません</li>
+    </ul>
+  </div>
+
+  <footer>
+    <p>ソースコード: <a href="https://github.com/jphacks/tkb_2603">jphacks/tkb_2603</a>(本体) / <a href="https://github.com/jphacks/tkb_2603-demo">jphacks/tkb_2603-demo</a>(デモ用)</p>
+    <p>表示は、ログから推定した作業の負担の目安です。疲労を測るものではありません。</p>
+  </footer>
+</main>
+</body>
+</html>
