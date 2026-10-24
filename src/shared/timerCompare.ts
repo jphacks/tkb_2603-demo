@@ -70,6 +70,8 @@ export interface TimerComparison {
   reading: number;
   /** どれか 1 つでも当たった数(重なりは 1 回と数える) */
   anyBusy: number;
+  /** 生成中か入力中に当たった数。読んでいる最中は推定なので入れない(パネルの 1 行はこれを使う) */
+  genOrTyping: number;
   /** 記録にその出来事があったか(無いと 0 になるのは当然なので、表で区別する) */
   hasGeneration: boolean;
   hasTyping: boolean;
@@ -87,6 +89,7 @@ export function compareTimer(log: StoredLogEntry[], intervalMin = TIMER_INTERVAL
   let typing = 0;
   let reading = 0;
   let anyBusy = 0;
+  let genOrTyping = 0;
   for (const t of ticks) {
     const g = inside(t, gen);
     const ty = inside(t, typ);
@@ -95,6 +98,7 @@ export function compareTimer(log: StoredLogEntry[], intervalMin = TIMER_INTERVAL
     if (ty) typing++;
     if (r) reading++;
     if (g || ty || r) anyBusy++;
+    if (g || ty) genOrTyping++;
   }
   return {
     ticks: ticks.length,
@@ -102,6 +106,7 @@ export function compareTimer(log: StoredLogEntry[], intervalMin = TIMER_INTERVAL
     typing,
     reading,
     anyBusy,
+    genOrTyping,
     hasGeneration: observations(sorted, 'generation_start').length > 0,
     hasTyping: observations(sorted, 'typing_start').length > 0,
   };
@@ -115,7 +120,7 @@ export const MIN_TICKS_TO_SHOW = 2;
 export interface TodayTimerSummary {
   /** 30 分ごとのタイマーが鳴った回数 */
   ticks: number;
-  /** そのうち、作業の途中(生成中・入力中・読んでいる最中)だった回数 */
+  /** そのうち、入力中か AI の生成中だった回数 */
   interrupted: number;
   /** ひといきが区切りで提案した回数 */
   prompts: number;
@@ -128,5 +133,5 @@ export function todayTimerSummary(log: StoredLogEntry[], now = Date.now()): Toda
   const today = log.filter((e) => e.at >= midnight.getTime() && e.at <= now);
   const c = compareTimer(today);
   if (c.ticks < MIN_TICKS_TO_SHOW) return null;
-  return { ticks: c.ticks, interrupted: c.anyBusy, prompts: today.filter((e) => e.type === 'prompt_shown').length };
+  return { ticks: c.ticks, interrupted: c.genOrTyping, prompts: today.filter((e) => e.type === 'prompt_shown').length };
 }

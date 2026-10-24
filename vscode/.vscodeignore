@@ -1,0 +1,11 @@
+# .vsix に入れるのは dist/extension.js と package.json・README だけ
+src/**
+test/**
+node_modules/**
+.vscode/**
+.vscode-test/**
+tsconfig.json
+vitest.config.*
+**/*.map
+**/*.test.ts
+.gitignore

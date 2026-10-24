@@ -198,7 +198,7 @@ function Detail({ snap, runner, onClose }: { snap: UiSnapshot; runner: Runner; o
           <Sparkline history={snap.state.history} minute={snap.state.minute} />
           <div className="hi-chart-labels"><span>30分前</span><span>いま</span></div>
         </details>
-        {timer && <p className="hi-muted hi-timer-compare">30 分ごとのタイマーだったら、今日 {timer.ticks} 回のうち {timer.interrupted} 回は作業の途中に割り込んでいました。ひといきは {timer.prompts} 回、区切りで提案しました。</p>}
+        {timer && <p className="hi-muted hi-timer-compare">30 分ごとのタイマーだったら、今日 {timer.ticks} 回のうち {timer.interrupted} 回は入力中か AI の生成中に鳴っていました。ひといきは {timer.prompts} 回、区切りで提案しました。</p>}
         {DEMO && <details className="hi-diagnostics">
           <summary>診断</summary>
           {!snap.state.llmAvailable && <p className="hi-muted">判断は未計測です。確認・切替は画面から取れる手がかりで計測しています。</p>}

@@ -250,7 +250,7 @@ describe('30 分ごとのタイマーとの比べ', () => {
       await click('作業モニターを開く');
       await act(async () => {});
       expect(container.querySelector('.hi-timer-compare')?.textContent).toBe(
-        '30 分ごとのタイマーだったら、今日 2 回のうち 1 回は作業の途中に割り込んでいました。ひといきは 0 回、区切りで提案しました。',
+        '30 分ごとのタイマーだったら、今日 2 回のうち 1 回は入力中か AI の生成中に鳴っていました。ひといきは 0 回、区切りで提案しました。',
       );
     } finally {
       vi.unstubAllGlobals();

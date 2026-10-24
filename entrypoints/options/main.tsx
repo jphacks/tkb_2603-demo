@@ -8,6 +8,7 @@ import {
   saveSettings,
   type Settings,
 } from '../../src/shared/settings';
+import { DEFAULT_PARAMS } from '../../src/core/types';
 import { DEMO } from '../../src/shared/flags';
 import { DemoStateButtons } from './DemoStates';
 import type { ClassifyResponse } from '../../src/shared/messages';
@@ -82,7 +83,7 @@ function Options() {
             <option value={1.5}>長め</option>
           </select>
         </label>
-        {DEMO && <label className="field">
+        {(DEMO || s.g !== DEFAULT_PARAMS.g) && <label className="field">
           たまる速さ: {s.g.toFixed(1)}(標準 3.2 = ふつうの作業で約 50 分)
           <input type="range" min={1.6} max={6.4} step={0.4} value={s.g} onChange={(e) => update({ g: Number(e.target.value) })} />
         </label>}
@@ -128,7 +129,7 @@ function Options() {
         </label>
       </section>
 
-      {DEMO && <section>
+      {(DEMO || s.speed !== 1) && <section>
         <h2>デモ</h2>
         <label className="field">
           時計の速さ

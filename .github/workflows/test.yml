@@ -1,0 +1,47 @@
+# main への push と PR で、Chrome 拡張と VS Code 拡張の型・テスト・ビルドを確かめる
+name: test
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  chrome:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run compile
+      - run: npm test
+      - run: npm run build
+
+  vscode:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: vscode
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            vscode/package-lock.json
+      # vscode/ の vitest・esbuild が ../src/core を変換するとき、ルートの tsconfig.json(.wxt/tsconfig.json を継ぐ)を読む。
+      # .wxt/ はルートの npm ci の postinstall(wxt prepare)で作られるので、先にルートも入れる
+      - run: npm ci
+        working-directory: .
+      - run: npm ci
+      - run: npm run compile
+      - run: npm test
+      - run: npm run build
