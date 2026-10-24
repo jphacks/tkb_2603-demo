@@ -1,3 +1,6 @@
+> **これはデモ用の repo です。本体は [jphacks/tkb_2603](https://github.com/jphacks/tkb_2603) です。**
+> 計算は本体と同じです。違いは `src/shared/flags.ts` の `DEMO = true`(時計の速さ・たまる速さ g・診断を画面に出す)と、器を決まった状態から始めるボタン(設定画面の「デモ」節と、VS Code のコマンド「ひといき(デモ): …」)だけです。
+
 # ひといき(仮名)
 
 [![IMAGE ALT TEXT HERE](https://jphacks.com/wp-content/uploads/2026/07/IMG_5316.png)](https://www.youtube.com/watch?v=piaNsc6ilBI)

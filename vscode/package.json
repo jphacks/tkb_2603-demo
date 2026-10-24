@@ -33,6 +33,18 @@
       {
         "command": "hitoiki.reset",
         "title": "ひといき: 器を 0 に戻す"
+      },
+      {
+        "command": "hitoiki.demo.empty",
+        "title": "ひといき(デモ): 器 0 から"
+      },
+      {
+        "command": "hitoiki.demo.near",
+        "title": "ひといき(デモ): 器 75% から(すぐ提案が出る手前)"
+      },
+      {
+        "command": "hitoiki.demo.beforeBreak",
+        "title": "ひといき(デモ): 休憩の直前(80% を超えて区切り待ち)"
       }
     ],
     "configuration": {

@@ -9,6 +9,7 @@ import {
   type Settings,
 } from '../../src/shared/settings';
 import { DEMO } from '../../src/shared/flags';
+import { DemoStateButtons } from './DemoStates';
 import type { ClassifyResponse } from '../../src/shared/messages';
 import './options.css';
 
@@ -139,6 +140,7 @@ function Options() {
           </select>
         </label>
         <p className="muted">本物と同じ計算を、時計だけ速めて動かします。画面に「デモ: ○倍速」と出ます。</p>
+        <DemoStateButtons />
       </section>}
     </main>
   );

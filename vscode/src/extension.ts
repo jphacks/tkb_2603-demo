@@ -5,6 +5,7 @@ import type { PromptAction } from '../../src/core/gate';
 import { contributionShares } from '../../src/core/model';
 import { ELEMENT_KEYS, ELEMENT_LABELS, type ElementKey, type EngineState, type ModelParams } from '../../src/core/types';
 import { SNOOZE_COPY } from '../../src/ui/copy';
+import { registerDemoCommands } from './demo';
 import { type FinishedBreak, Tracker, VSCODE_PARAMS, stretchMessage, welcomeMessage } from './tracker';
 
 const STATE_KEY = 'hitoiki:engine';
@@ -218,6 +219,8 @@ export function activate(context: vscode.ExtensionContext): HitoikiApi {
       await save();
     }),
   );
+
+  registerDemoCommands(context, tracker, () => (render(), void save()));
 
   // 起動時に開いていたファイルを、切替の起点にする
   tracker.onActiveEditor(vscode.window.activeTextEditor?.document.uri, Date.now());

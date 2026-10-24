@@ -121,8 +121,18 @@ async function main() {
   const before2 = api.promptsShown();
   const t2 = Date.now();
   while (api.promptsShown() === before2 && Date.now() - t2 < 15_000) await sleep(200);
-  log('補完の後の提案', api.promptsShown() - before2, `待った秒数=${((Date.now() - t2) / 1000).toFixed(1)}`, status());
+  log('補完の後の提案', api.promptsShown() - before2, `窓が前=${vscode.window.state.focused}`, `待っている=${api.tracker.state.prompt.waitingForUser}`, `次まで=${api.tracker.state.prompt.notBefore}`, `待った秒数=${((Date.now() - t2) / 1000).toFixed(1)}`, status());
   if (api.promptsShown() === before2) throw new Error('補完の後に提案が出なかった');
+
+  // デモの「状態から始める」(DEMO = true の時だけ登録される)
+  if ((await vscode.commands.getCommands(true)).includes('hitoiki.demo.near')) {
+    await vscode.commands.executeCommand('hitoiki.demo.near');
+    log('デモ: 器 75% から', status());
+    if (Math.abs(api.tracker.load() - 75) > 1 || api.tracker.state.breakState) throw new Error('デモの状態にならなかった');
+    await vscode.commands.executeCommand('hitoiki.demo.beforeBreak');
+    log('デモ: 休憩の直前', status());
+    if (!(api.tracker.load() > 80)) throw new Error('デモの状態にならなかった');
+  }
 
   // 通知を撮る(E2E_SHOT にファイルの場所を渡した時だけ)
   if (process.env.E2E_SHOT) {
