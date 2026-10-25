@@ -24,6 +24,8 @@ vi.mock('./observer', () => ({
 }));
 
 let observerCallbacks: { onResponseDone(text: string, user: string, continuation: boolean): void };
+// デモ repo の既定値(30 倍速・休憩短め)に左右されないよう、等倍・標準で確かめる
+const BASE = { ...DEFAULT_SETTINGS, speed: 1, breakScale: 1 };
 
 let snap: UiSnapshot;
 let unsubscribe: () => void;
@@ -32,7 +34,7 @@ beforeEach(() => {
   vi.setSystemTime(new Date('2026-10-24T04:00:00Z'));
   vi.clearAllMocks();
   vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
-  vi.mocked(loadSettings).mockResolvedValue({ ...DEFAULT_SETTINGS });
+  vi.mocked(loadSettings).mockResolvedValue({ ...BASE });
   vi.mocked(loadEngine).mockResolvedValue({ state: { ...initialState(), rf: 85, lastActivityAt: 0 }, realSavedAt: Date.now(), lastTickReal: Date.now() });
   vi.mocked(drainInbox).mockResolvedValue([]);
 });
@@ -45,7 +47,7 @@ afterEach(() => {
 });
 
 it('同意後は個人キーなしでも分類し、障害時には読む量などのローカル計測を保つ', async () => {
-  vi.mocked(loadSettings).mockResolvedValue({ ...DEFAULT_SETTINGS, classificationConsent: 'accepted', classificationConsentVersion: 1 });
+  vi.mocked(loadSettings).mockResolvedValue({ ...BASE, classificationConsent: 'accepted', classificationConsentVersion: 1 });
   const sendMessage = vi.fn().mockResolvedValue({ ok: false, error: 'proxy_rate_limited', model: 'proxy', ms: 0 });
   vi.stubGlobal('browser', { runtime: { sendMessage } });
   const runner = new Runner(); await runner.start();
@@ -58,7 +60,7 @@ it('同意後は個人キーなしでも分類し、障害時には読む量な�
 });
 
 it('同意を取り消す前に開始した遅い分類結果を反映しない', async () => {
-  const accepted = { ...DEFAULT_SETTINGS, classificationConsent: 'accepted' as const, classificationConsentVersion: 1 };
+  const accepted = { ...BASE, classificationConsent: 'accepted' as const, classificationConsentVersion: 1 };
   vi.mocked(loadSettings).mockResolvedValue(accepted);
   let resolve!: (value: unknown) => void;
   vi.stubGlobal('browser', { runtime: { sendMessage: vi.fn(() => new Promise((done) => { resolve = done; })) } });
