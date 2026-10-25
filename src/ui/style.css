@@ -186,21 +186,93 @@
 .hi-memo-field { display: block; padding: 0 12px 12px; color: var(--hi-muted); font-size: 11px; }
 .hi-input { display: block; width: 100%; margin-top: 6px; padding: 10px; border: 1px solid var(--hi-border); border-radius: 8px; background: var(--hi-bg); color: var(--hi-fg); font-size: 12px; }
 .hi-end-break { margin-top: 16px; margin-bottom: 22px; }
-.hi-confirm { margin-top: 16px; padding: 16px; border: 1px solid var(--hi-border); border-radius: 12px; background: var(--hi-soft); }
+.hi-confirm-overlay { position: fixed; inset: 0; z-index: 1; display: flex; align-items: center; justify-content: center; padding: 20px; background: var(--hi-overlay); }
+.hi-confirm { width: 320px; max-width: 100%; max-height: calc(100dvh - 40px); overflow-y: auto; padding: 24px; text-align: center; }
+.hi-confirm h2 { font-size: 16px; font-weight: 600; }
 .hi-confirm .hi-actions, .hi-break > .hi-actions { justify-content: center; }
-.hi-confirm .hi-btn:not(.hi-primary) { background: var(--hi-bg); }
+.hi-confirm .hi-btn:not(.hi-primary) { background: var(--hi-soft); }
 .hi-welcome-line { margin: 16px 0 12px !important; }
 .hi-memo { margin-top: 16px; padding: 12px; border-radius: 10px; background: var(--hi-soft); overflow-wrap: anywhere; }
 .hi-memo p { margin-top: 6px; }
 .hi-toast { position: fixed; left: 50%; top: 24px; transform: translateX(-50%); z-index: 2147483005; width: max-content; max-width: calc(100vw - 32px); padding: 12px 20px; border: 1px solid var(--hi-border); border-radius: 12px; color: var(--hi-fg); background: var(--hi-bg); box-shadow: var(--hi-shadow); font-size: 12px; }
-.hi-picto-body { transform-origin: 50px 96px; }
-.hi-picto-reach .hi-picto-body { animation: hi-reach 2.8s ease-in-out infinite; }
-.hi-picto-shoulder .hi-arm-l { transform-origin: 48px 57px; animation: hi-spin 4s linear infinite; }
-.hi-picto-shoulder .hi-arm-r { transform-origin: 52px 57px; animation: hi-spin 4s linear infinite reverse; }
-.hi-picto-sway .hi-picto-body { animation: hi-sway 3.6s ease-in-out infinite; }
-@keyframes hi-reach { 0%, 100% { transform: scaleY(.96); } 50% { transform: scaleY(1.03); } }
-@keyframes hi-spin { to { transform: rotate(360deg); } }
-@keyframes hi-sway { 0%, 100% { transform: rotate(-9deg); } 50% { transform: rotate(9deg); } }
+/* 位置決めはSVGの親g、動作は子g。関節のローカル原点を回す。
+   全部位で同じ周期を共有し、静止区間とループの始終も揃える。 */
+.hi-picto { --hi-motion-duration: 5.6s; }
+.hi-picto-body, .hi-picto-shoulders, .hi-picto-arm, .hi-picto-forearm { transform-box: view-box; }
+.hi-picto-body { transform-origin: 50px 95px; }
+.hi-picto-shoulders { transform-origin: 50px 62px; }
+.hi-picto-arm, .hi-picto-forearm { transform-origin: 0 0; }
+.hi-picto-rays { opacity: .45; }
+/* 動きを減らす設定では、腕を上げた静止姿勢を見せる。 */
+.hi-picto-reach .hi-picto-arm, .hi-picto-sway .hi-picto-arm { transform: rotate(142deg); }
+.hi-picto-reach .hi-picto-forearm, .hi-picto-sway .hi-picto-forearm { transform: rotate(12deg); }
+.hi-picto-reach .hi-picto-body { animation: hi-reach-body var(--hi-motion-duration) ease-in-out infinite; }
+.hi-picto-reach .hi-picto-arm { animation: hi-reach-arm var(--hi-motion-duration) ease-in-out infinite; }
+.hi-picto-reach .hi-picto-forearm { animation: hi-reach-elbow var(--hi-motion-duration) ease-in-out infinite; }
+.hi-picto-reach .hi-picto-rays { animation: hi-reach-rays var(--hi-motion-duration) ease-in-out infinite; }
+.hi-picto-shoulder { --hi-motion-duration: 5s; }
+.hi-picto-shoulder-arm { animation: hi-shoulder-circle var(--hi-motion-duration) linear infinite; }
+.hi-picto-sway { --hi-motion-duration: 6s; }
+.hi-picto-sway .hi-picto-body { animation: hi-sway-body var(--hi-motion-duration) ease-in-out infinite; }
+@keyframes hi-reach-body {
+  0%, 10%, 90%, 100% { transform: translateY(0); }
+  42%, 58% { transform: translateY(-2px); }
+}
+@keyframes hi-reach-arm {
+  0%, 10%, 90%, 100% { transform: rotate(0deg); }
+  42%, 58% { transform: rotate(142deg); }
+}
+@keyframes hi-reach-elbow {
+  0%, 10%, 90%, 100% { transform: rotate(0deg); }
+  42%, 58% { transform: rotate(12deg); }
+}
+@keyframes hi-reach-rays {
+  0%, 30%, 70%, 100% { opacity: 0; }
+  42%, 58% { opacity: .45; }
+}
+/* 肩→肘→手首→肩の三角形。肩は胴体に接続し、固定の横線は描かない。
+   上腕・前腕を約1割短くするため肘の軌跡を88%に縮め、中心を2px上へ。
+   肘は半径8.8×13.2px、手首は上腕から55度・肩から12pxの位置で追従。
+   32分割と角度のsmoothstepで始終を緩め、各周の前後に0.5秒休む。 */
+@keyframes hi-shoulder-circle {
+  0%, 10%, 90%, 100% { d: path("M0 0L-22.88 7.68L-9.65 -7.13Z"); }
+  12.5% { d: path("M0 0L-23.04 7.68L-9.64 -7.15Z"); }
+  15% { d: path("M0 0L-23.5 7.65L-9.59 -7.22Z"); }
+  17.5% { d: path("M0 0L-24.24 7.52L-9.49 -7.35Z"); }
+  20% { d: path("M0 0L-25.23 7.2L-9.32 -7.56Z"); }
+  22.5% { d: path("M0 0L-26.41 6.57L-9.05 -7.88Z"); }
+  25% { d: path("M0 0L-27.7 5.52L-8.67 -8.29Z"); }
+  27.5% { d: path("M0 0L-29.01 3.95L-8.15 -8.81Z"); }
+  30% { d: path("M0 0L-30.2 1.81L-7.46 -9.4Z"); }
+  32.5% { d: path("M0 0L-31.12 -0.88L-6.6 -10.02Z"); }
+  35% { d: path("M0 0L-31.62 -4.02L-5.59 -10.62Z"); }
+  37.5% { d: path("M0 0L-31.59 -7.44L-4.45 -11.15Z"); }
+  40% { d: path("M0 0L-30.93 -10.87L-3.23 -11.56Z"); }
+  42.5% { d: path("M0 0L-29.62 -14L-2.02 -11.83Z"); }
+  45% { d: path("M0 0L-27.75 -16.52L-0.89 -11.97Z"); }
+  47.5% { d: path("M0 0L-25.43 -18.15L0.11 -12Z"); }
+  50% { d: path("M0 0L-22.88 -18.72L0.9 -11.97Z"); }
+  52.5% { d: path("M0 0L-20.33 -18.15L1.41 -11.92Z"); }
+  55% { d: path("M0 0L-18.01 -16.52L1.57 -11.9Z"); }
+  57.5% { d: path("M0 0L-16.14 -14L1.24 -11.94Z"); }
+  60% { d: path("M0 0L-14.83 -10.87L0.26 -12Z"); }
+  62.5% { d: path("M0 0L-14.17 -7.44L-1.52 -11.9Z"); }
+  65% { d: path("M0 0L-14.14 -4.02L-3.93 -11.34Z"); }
+  67.5% { d: path("M0 0L-14.64 -0.88L-6.28 -10.22Z"); }
+  70% { d: path("M0 0L-15.56 1.81L-7.97 -8.97Z"); }
+  72.5% { d: path("M0 0L-16.75 3.95L-8.96 -7.99Z"); }
+  75% { d: path("M0 0L-18.06 5.52L-9.46 -7.39Z"); }
+  77.5% { d: path("M0 0L-19.35 6.57L-9.68 -7.09Z"); }
+  80% { d: path("M0 0L-20.53 7.2L-9.75 -7Z"); }
+  82.5% { d: path("M0 0L-21.52 7.52L-9.74 -7.01Z"); }
+  85% { d: path("M0 0L-22.26 7.65L-9.7 -7.06Z"); }
+  87.5% { d: path("M0 0L-22.72 7.68L-9.67 -7.11Z"); }
+}
+@keyframes hi-sway-body {
+  0%, 8%, 44%, 56%, 92%, 100% { transform: rotate(0deg); }
+  22%, 30% { transform: rotate(-9deg); }
+  70%, 78% { transform: rotate(9deg); }
+}
 @media (max-width: 600px) {
   .hi-detail { padding: 20px; }
   .hi-dock { right: 16px; }

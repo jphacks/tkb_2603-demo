@@ -78,6 +78,7 @@ describe('ChatObserver(ChatGPT)', () => {
     expect(cb.onResponseDone).toHaveBeenCalledTimes(1);
     expect(cb.onResponseDone.mock.calls[0]![0]).toContain('4 つに分ける');
     expect(cb.onResponseDone.mock.calls[0]![1]).toBe('React でフォームを作って');
+    expect(cb.onResponseDone.mock.calls[0]![3]).toBe('stop_button');
 
     // 同じ回答を 2 回数えない
     await vi.advanceTimersByTimeAsync(5000);
@@ -89,6 +90,158 @@ describe('ChatObserver(ChatGPT)', () => {
     expect(cb.onResponseDone).toHaveBeenCalledTimes(2);
     expect(cb.onResponseDone.mock.calls[1]![0]).toBe(' 続きの説明です。');
     expect(cb.onResponseDone.mock.calls[1]![2]).toBe(true);
+    obs.stop();
+  });
+
+  it('停止ボタンが無い画面: ページのほかの所が 1 秒ごとに変わっても、回答の字数が 2.5 秒止まれば終わり', async () => {
+    const cb = callbacks();
+    const obs = new ChatObserver(CHATGPT, cb);
+    obs.start();
+    // 回答と関係の無い所(サイドバーなど)が 1 秒ごとに変わり続ける
+    const side = document.createElement('div');
+    document.body.appendChild(side);
+    const ticker = window.setInterval(() => (side.textContent = String(Date.now())), 1000);
+    const composer = document.getElementById('prompt-textarea')!;
+    composer.textContent = '質問';
+    composer.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    composer.textContent = '';
+    await vi.advanceTimersByTimeAsync(400);
+    addUser('質問');
+    addAssistant('回答です。最後まで書きました。');
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(cb.onResponseDone).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(cb.onResponseDone).toHaveBeenCalledTimes(1);
+    expect(cb.onResponseDone.mock.calls[0]![2]).toBe(false);
+    expect(cb.onResponseDone.mock.calls[0]![3]).toBe('quiet');
+    expect(obs.diagnostics.completionMethod).toBe('quiet');
+    clearInterval(ticker);
+    obs.stop();
+  });
+
+  it('停止ボタンが無い画面: 回答の字が伸び続けている間は終わりにしない', async () => {
+    const cb = callbacks();
+    const obs = new ChatObserver(CHATGPT, cb);
+    obs.start();
+    const composer = document.getElementById('prompt-textarea')!;
+    composer.textContent = '質問';
+    composer.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    composer.textContent = '';
+    await vi.advanceTimersByTimeAsync(400);
+    addUser('質問');
+    const a = addAssistant('回答');
+    for (let i = 0; i < 10; i++) {
+      a.textContent += 'が続きます';
+      await vi.advanceTimersByTimeAsync(1000);
+    }
+    expect(cb.onResponseDone).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(cb.onResponseDone).toHaveBeenCalledTimes(1);
+    expect(cb.onResponseDone.mock.calls[0]![0]).toBe('回答' + 'が続きます'.repeat(10));
+    obs.stop();
+  });
+
+  it('送信を取り逃しても、吹き出しが最後に 1 つ増えたら(生成中が取れなくても)送信を補う。Enter で取れた時は二重にしない', async () => {
+    const cb = callbacks();
+    addUser('前の質問');
+    const obs = new ChatObserver(CHATGPT, cb);
+    obs.start();
+    await vi.advanceTimersByTimeAsync(5500);
+    // Enter が取れない画面: 吹き出しだけが増える。停止ボタンも出ない
+    addUser('取り逃した質問');
+    await vi.advanceTimersByTimeAsync(400);
+    expect(cb.onPromptSent).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(800);
+    expect(cb.onPromptSent).toHaveBeenCalledTimes(1);
+    expect(cb.onPromptSent).toHaveBeenCalledWith('取り逃した質問');
+
+    // Enter で取れた送信は、吹き出しから二重に数えない
+    await vi.advanceTimersByTimeAsync(5000);
+    const composer = document.getElementById('prompt-textarea')!;
+    composer.textContent = '次の質問';
+    composer.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    composer.textContent = '';
+    addUser('次の質問');
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(cb.onPromptSent).toHaveBeenCalledTimes(2);
+    expect(cb.onPromptSent.mock.calls[1]![0]).toBe('次の質問');
+    obs.stop();
+  });
+
+  it('開いた直後に描かれた吹き出しや、上に読み込まれた古い吹き出しは送信と数えない', async () => {
+    const cb = callbacks();
+    const obs = new ChatObserver(CHATGPT, cb);
+    obs.start();
+    await vi.advanceTimersByTimeAsync(600);
+    addUser('開いた会話の 1 通目'); // 開いた直後に遅れて描かれる
+    await vi.advanceTimersByTimeAsync(5500);
+    // 上へのスクロールで古い吹き出しが先頭に 1 つ読み込まれる(最後の吹き出しは変わらない)
+    const old = document.createElement('div');
+    old.setAttribute('data-message-author-role', 'user');
+    old.textContent = '古い質問';
+    document.getElementById('thread')!.prepend(old);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(cb.onPromptSent).not.toHaveBeenCalled();
+    obs.stop();
+  });
+
+  it('前の回答が残っている会話で送っても、停止ボタンが無い画面で前の回答を新しい回答と数えない', async () => {
+    addUser('前の質問');
+    addAssistant('前の回答です。');
+    const cb = callbacks();
+    const obs = new ChatObserver(CHATGPT, cb);
+    obs.start();
+    await vi.advanceTimersByTimeAsync(6000);
+    const composer = document.getElementById('prompt-textarea')!;
+    composer.textContent = '新しい質問';
+    composer.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    composer.textContent = '';
+    addUser('新しい質問');
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(cb.onResponseDone).not.toHaveBeenCalled();
+    addAssistant('新しい回答です。');
+    await vi.advanceTimersByTimeAsync(3500);
+    expect(cb.onResponseDone).toHaveBeenCalledTimes(1);
+    expect(cb.onResponseDone.mock.calls[0]!.slice(0, 4)).toEqual(['新しい回答です。', '新しい質問', false, 'quiet']);
+    obs.stop();
+  });
+
+  it('前の回答が残っている会話で、停止ボタンが送信の 1 秒後に出ても、回答は停止ボタンの 1 回だけ', async () => {
+    addUser('前の質問');
+    addAssistant('前の回答です。');
+    const cb = callbacks();
+    const obs = new ChatObserver(CHATGPT, cb);
+    obs.start();
+    await vi.advanceTimersByTimeAsync(6000);
+    const composer = document.getElementById('prompt-textarea')!;
+    composer.textContent = '新しい質問';
+    composer.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    composer.textContent = '';
+    addUser('新しい質問');
+    await vi.advanceTimersByTimeAsync(1000);
+    setStop(true);
+    const a = addAssistant('新しい');
+    await vi.advanceTimersByTimeAsync(3000);
+    a.textContent = '新しい回答です。';
+    setStop(false);
+    await vi.advanceTimersByTimeAsync(600);
+    expect(cb.onResponseDone.mock.calls.map((c) => [c[0], c[3]])).toEqual([['新しい回答です。', 'stop_button']]);
+    obs.stop();
+  });
+
+  it('吹き出しが送信より 1 秒遅れて出ても、送信を二重に数えない', async () => {
+    const cb = callbacks();
+    const obs = new ChatObserver(CHATGPT, cb);
+    obs.start();
+    await vi.advanceTimersByTimeAsync(6000);
+    const composer = document.getElementById('prompt-textarea')!;
+    composer.textContent = '質問';
+    composer.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    composer.textContent = '';
+    await vi.advanceTimersByTimeAsync(1000);
+    addUser('質問');
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(cb.onPromptSent).toHaveBeenCalledTimes(1);
     obs.stop();
   });
 

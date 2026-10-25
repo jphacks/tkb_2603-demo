@@ -39,6 +39,14 @@ const button = (label: string) => {
 const click = async (label: string) => { await act(async () => button(label).click()); };
 const publish = async () => { await act(async () => update(snap)); };
 
+function expectDecision(value: string, percent?: number) {
+  const meter = container.querySelector('[role="meter"][aria-label="判断"]')!;
+  expect(meter.parentElement?.querySelector('.hi-meter-percent')?.textContent).toBe(value);
+  expect(meter.getAttribute('aria-valuetext')).toBe(value);
+  expect(meter.getAttribute('aria-valuenow')).toBe(percent === undefined ? null : String(percent));
+  expect(meter.querySelector<HTMLElement>('.hi-bar-fill')?.style.width).toBe(`${percent ?? 0}%`);
+}
+
 beforeEach(async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-10-24T03:00:00Z'));
@@ -87,7 +95,7 @@ describe.each([false, true])('DEMO = %s', (demo) => {
       expect(container.querySelectorAll('[role="meter"]')).toHaveLength(6);
       expect(container.querySelector('.hi-load-heading')?.textContent).toContain('0%');
       expect(container.querySelector<HTMLDetailsElement>('.hi-history')?.open).toBe(false);
-      expect(container.textContent).toContain('未計測');
+      expect(container.querySelector('[aria-label="判断"]')?.getAttribute('aria-valuenow')).toBe('0');
       expect(document.head.textContent).toContain('384px');
       await click('設定を開く');
       expect(runner.openOptions).toHaveBeenCalledOnce();
@@ -97,6 +105,54 @@ describe.each([false, true])('DEMO = %s', (demo) => {
       await click('作業モニターを開く');
       await click('休憩する');
       expect(runner.startManualBreak).toHaveBeenCalledWith('');
+    });
+
+    it('判断は初回0%、同意後は分類待ちを説明し、分類結果の割合へ更新する', async () => {
+      await click('作業モニターを開く');
+      expectDecision('0%', 0);
+      expect(container.querySelector('#hi-decision-status')?.textContent).toContain('同意すると始まります');
+      snap = { ...snap, settings: { ...snap.settings, classificationConsent: 'accepted', classificationConsentVersion: 1 },
+        state: { ...snap.state, contribSinceBreak: { reading: 3, decision: 0, verification: 0, switching: 0, time: 5 } } };
+      await publish();
+      expectDecision('0%', 0);
+      expect(container.querySelector('#hi-decision-status')?.textContent).toContain('分類結果を待っています');
+      snap = { ...snap, lastClassify: { ok: true, model: 'test', ms: 100 },
+        state: { ...snap.state, llmAvailable: true, contribSinceBreak: { ...snap.state.contribSinceBreak, decision: 2 } } };
+      await publish();
+      expectDecision('20%', 20);
+      expect(container.querySelector('#hi-decision-status')).toBeNull();
+      expect(container.querySelector('[aria-label="判断"]')?.hasAttribute('aria-describedby')).toBe(false);
+      snap = { ...snap, state: { ...snap.state, contribSinceBreak: { ...snap.state.contribSinceBreak, decision: 0 } } };
+      await publish();
+      expectDecision('0%', 0);
+      expect(container.querySelector('#hi-decision-status')).toBeNull();
+    });
+
+    it('分類の失敗は0%と区別し、再び成功すると割合を表示する', async () => {
+      snap = { ...snap, settings: { ...snap.settings, classificationConsent: 'accepted', classificationConsentVersion: 1 },
+        lastClassify: { ok: false, model: 'proxy', ms: 100, error: 'rate_limited' },
+        state: { ...snap.state, contribSinceBreak: { reading: 3, decision: 2, verification: 0, switching: 0, time: 5 } } };
+      await publish();
+      await click('作業モニターを開く');
+      expectDecision('未計測');
+      expect(container.querySelector('#hi-decision-status')?.textContent).toContain('計測は続いています');
+      expect(container.querySelector('[aria-label="判断"]')?.getAttribute('aria-describedby')).toBe('hi-decision-status');
+      snap = { ...snap, lastClassify: { ok: true, model: 'test', ms: 100 }, state: { ...snap.state, llmAvailable: true } };
+      await publish();
+      expectDecision('20%', 20);
+      expect(container.querySelector('#hi-decision-status')).toBeNull();
+    });
+
+    it.each([
+      ['同意取消', { classificationConsent: 'declined' as const }, '同意すると始まります'],
+      ['分類オフ', { llmEnabled: false }, '分類はオフ'],
+      ['自分のキー未設定', { classificationConsent: 'accepted' as const, classificationConsentVersion: 1, classifierMode: 'direct' as const }, 'APIキーの設定が必要'],
+    ])('%sのときは未計測と理由を表示する', async (_, settings, reason) => {
+      snap = { ...snap, settings: { ...snap.settings, ...settings } };
+      await publish();
+      await click('作業モニターを開く');
+      expectDecision('未計測');
+      expect(container.querySelector('#hi-decision-status')?.textContent).toContain(reason);
     });
 
     it('通知は今休むか開始待ちの2択。待っている間も％と開始ボタンを表示する', async () => {
@@ -173,6 +229,64 @@ describe.each([false, true])('DEMO = %s', (demo) => {
       expect(container.querySelector('.hi-pill-percent')?.textContent).toBe('30%');
       await click('作業モニターを開く');
       expect(container.querySelector('aside')).not.toBeNull();
+    });
+
+    it('右上の×で終了確認を開き、Escで休憩を保って×へ戻れる', async () => {
+      snap = { ...snap, state: { ...snap.state, breakState: { startedAt: 0, plannedMin: 10, memo: '続きを確認' } } };
+      await publish();
+      const close = container.querySelector<HTMLButtonElement>('.hi-break-head button')!;
+      await act(async () => close.click());
+      expect(runner.askEndBreak).toHaveBeenCalledOnce();
+      snap = { ...snap, confirmEndBreak: true };
+      await publish();
+      const dialog = container.querySelector('[role="alertdialog"]')!;
+      expect(dialog.textContent).toContain('休憩を終えますか？');
+      expect(document.activeElement).toBe(button('続ける'));
+      expect(container.querySelector('.hi-break')?.hasAttribute('inert')).toBe(true);
+      expect(container.querySelector('.hi-break')?.getAttribute('aria-hidden')).toBe('true');
+      await act(async () => dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+      expect(runner.cancelEndBreak).toHaveBeenCalledOnce();
+      snap = { ...snap, confirmEndBreak: false };
+      await publish();
+      expect(container.querySelector('[role="alertdialog"]')).toBeNull();
+      expect(container.querySelector('.hi-break')?.hasAttribute('inert')).toBe(false);
+      expect(document.activeElement).toBe(close);
+      expect(container.querySelector('input')?.value).toBe('続きを確認');
+      expect(runner.endBreakEarly).not.toHaveBeenCalled();
+    });
+
+    it('下の終了ボタンからの確認も、続けると元のボタンとタイマーへ戻る', async () => {
+      snap = { ...snap, state: { ...snap.state, breakState: { startedAt: 0, plannedMin: 10, memo: '' } } };
+      await publish();
+      const timer = container.querySelector('[role="timer"]')?.textContent;
+      const end = container.querySelector<HTMLButtonElement>('.hi-end-break')!;
+      await act(async () => end.click());
+      expect(runner.askEndBreak).toHaveBeenCalledOnce();
+      snap = { ...snap, confirmEndBreak: true };
+      await publish();
+      await click('続ける');
+      expect(runner.cancelEndBreak).toHaveBeenCalledOnce();
+      snap = { ...snap, confirmEndBreak: false };
+      await publish();
+      expect(document.activeElement).toBe(end);
+      expect(container.querySelector('[role="timer"]')?.textContent).toBe(timer);
+    });
+
+    it('終了を確定するとオーバーレイを除き、元のページの入力欄へ戻る', async () => {
+      const composer = document.createElement('input');
+      document.body.append(composer);
+      composer.focus();
+      snap = { ...snap, state: { ...snap.state, breakState: { startedAt: 0, plannedMin: 10, memo: '' } } };
+      await publish();
+      await click('休憩を終える');
+      snap = { ...snap, confirmEndBreak: true };
+      await publish();
+      await click('終える');
+      expect(runner.endBreakEarly).toHaveBeenCalledOnce();
+      snap = { ...snap, confirmEndBreak: false, state: { ...snap.state, breakState: null } };
+      await publish();
+      expect(container.querySelector('.hi-overlay')).toBeNull();
+      expect(document.activeElement).toBe(composer);
     });
 
     it('秒表示は操作による再描画で戻らず、倍速と新しい時計に追従する', async () => {
