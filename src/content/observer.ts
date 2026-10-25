@@ -14,13 +14,16 @@ export interface Diagnostics {
   lastResponseChars: number;
   /** 最後の回答の先頭(実機の確認用。保存しない) */
   lastResponseHead: string;
-  completionMethod: 'stop_button' | 'quiet_dom' | null;
+  completionMethod: CompletionMethod | null;
 }
+
+/** 回答の終わりをどちらで決めたか: 停止ボタンが消えた / 最後の回答の字数が止まった */
+export type CompletionMethod = 'stop_button' | 'quiet';
 
 export interface ObserverCallbacks {
   onPromptSent(text: string): void;
   /** continuation: 終わったと思った回答が、その後も伸びた分 */
-  onResponseDone(text: string, userText: string, continuation: boolean): void;
+  onResponseDone(text: string, userText: string, continuation: boolean, method: CompletionMethod): void;
   onErrorPaste(lines: number): void;
   onConversationSwitch(): void;
   onActivity(): void;
@@ -34,10 +37,14 @@ function textOf(el: Element | null | undefined): string {
   return (el as HTMLElement | null)?.innerText ?? el?.textContent ?? '';
 }
 
-/** DOM の変化がこの秒数止まったら、生成が終わったとみなす(停止ボタンが見つからない時の代わり) */
+/** 最後の回答の字数がこの秒数変わらなければ、生成が終わったとみなす(停止ボタンが見つからない時の代わり) */
 const QUIET_MS = 2500;
 /** この秒数入力が無ければ「入力中」ではない */
 const TYPING_IDLE_MS = 3000;
+/** 吹き出しが増えてから、この間に Enter・クリックの送信が記録されなければ、吹き出しから送信を補う */
+const BACKFILL_WAIT_MS = 600;
+/** 読み込み・会話の切替の直後は、吹き出しが描かれていくだけなので補わない */
+const BACKFILL_SETTLE_MS = 5000;
 
 export class ChatObserver {
   diagnostics: Diagnostics;
@@ -48,14 +55,21 @@ export class ChatObserver {
   private lastUserText = '';
   private pendingUserText = '';
   private wasGenerating = false;
-  private lastMutationAt = 0;
+  /** 最後の回答の字数が最後に変わった時刻と、その時の要素・字数(ページのほかの所の変化は見ない) */
+  private textChangedAt = 0;
+  private seenEl: Element | null = null;
+  private seenLen = 0;
   private lastAssistantLen = 0;
   private lastAssistantEl: Element | null = null;
   private lastUserCount = -1;
+  private lastUserEl: Element | null = null;
+  private lastSentAt = 0;
+  /** 送信した時の最後の回答(前の回答)。字数の静けさで終わりにするのは、これと別の回答の時だけ */
+  private sentAssistantEl: Element | null = null;
+  private backfillFrom = 0;
   private awaitingResponse = false;
   private typingActive = false;
   private timers: number[] = [];
-  private observer: MutationObserver | null = null;
 
   constructor(
     readonly site: SiteDef,
@@ -74,15 +88,12 @@ export class ChatObserver {
   }
 
   start(): void {
+    this.backfillFrom = Date.now() + BACKFILL_SETTLE_MS;
     document.addEventListener('keydown', this.onKeyDown, true);
     document.addEventListener('input', this.onInput, true);
     document.addEventListener('paste', this.onPaste, true);
     document.addEventListener('click', this.onClick, true);
     window.addEventListener('scroll', this.onScroll, true);
-    this.observer = new MutationObserver(() => {
-      this.lastMutationAt = Date.now();
-    });
-    this.observer.observe(document.body, { childList: true, subtree: true, characterData: true });
     this.timers.push(window.setInterval(this.poll, 500));
   }
 
@@ -92,7 +103,6 @@ export class ChatObserver {
     document.removeEventListener('paste', this.onPaste, true);
     document.removeEventListener('click', this.onClick, true);
     window.removeEventListener('scroll', this.onScroll, true);
-    this.observer?.disconnect();
     for (const t of this.timers) clearInterval(t);
     this.timers = [];
   }
@@ -155,8 +165,23 @@ export class ChatObserver {
     if (!text) return;
     this.lastUserText = text;
     this.pendingUserText = '';
-    this.awaitingResponse = true;
+    this.noteSent();
     this.cb.onPromptSent(text);
+  }
+
+  private noteSent(): void {
+    this.awaitingResponse = true;
+    this.lastSentAt = Date.now();
+    const assistants = this.allMatch('assistant');
+    this.sentAssistantEl = assistants[assistants.length - 1] ?? null;
+  }
+
+  /** Enter・クリックで送信が取れなかった時に、増えた吹き出しから送信を補う(文の比較はしない。整形で一致しないため) */
+  private backfillSent(bubble: Element): void {
+    if (this.awaitingResponse || Date.now() - this.lastSentAt < BACKFILL_WAIT_MS * 2) return;
+    this.lastUserText = textOf(bubble);
+    this.noteSent();
+    this.cb.onPromptSent(this.lastUserText);
   }
 
   private onKeyDown = (e: KeyboardEvent) => {
@@ -226,6 +251,7 @@ export class ChatObserver {
         this.lastAssistantEl = null;
         this.lastUserCount = -1;
         this.awaitingResponse = false;
+        this.backfillFrom = Date.now() + BACKFILL_SETTLE_MS;
         this.cb.onConversationSwitch();
       } else if (prevId === null) {
         this.lastUserCount = -1;
@@ -244,22 +270,32 @@ export class ChatObserver {
 
     const last = assistants[assistants.length - 1];
     const lastText = this.assistantText(last);
+    if (last !== this.seenEl || lastText.length !== this.seenLen) {
+      this.seenEl = last ?? null;
+      this.seenLen = lastText.length;
+      this.textChangedAt = Date.now();
+    }
+    const textQuiet = Date.now() - this.textChangedAt > QUIET_MS;
 
-    // 送信を取り逃しても、生成中にユーザーの吹き出しが増えたら送信とみなす(文の比較はしない。整形で一致しないため)
-    if (this.lastUserCount < 0) this.lastUserCount = users.length;
-    if (users.length > this.lastUserCount) {
-      if (!this.awaitingResponse && generating) {
-        const userText = textOf(users[users.length - 1]);
-        this.lastUserText = userText;
-        this.awaitingResponse = true;
-        this.cb.onPromptSent(userText);
+    // 送信を取り逃しても、ユーザーの吹き出しが最後に 1 つ増えたら、少し待って送信とみなす(生成中が取れない画面でも)。
+    // 上へのスクロールで古い会話が読み込まれた時は最後の吹き出しが変わらず、会話を開いた時はまとめて増えるので数えない
+    const newestUser = users[users.length - 1] ?? null;
+    if (this.lastUserCount < 0) {
+      this.lastUserCount = users.length;
+      this.lastUserEl = newestUser;
+    }
+    if (users.length !== this.lastUserCount) {
+      if (users.length === this.lastUserCount + 1 && newestUser !== this.lastUserEl && Date.now() >= this.backfillFrom) {
+        const bubble = newestUser!;
+        window.setTimeout(() => this.backfillSent(bubble), BACKFILL_WAIT_MS);
       }
       this.lastUserCount = users.length;
+      this.lastUserEl = newestUser;
     }
 
     if (!this.wasGenerating && generating) this.cb.onGenerationStart?.();
 
-    // 生成の終わり: 停止ボタンが消えた、または停止ボタンが無い画面で DOM の変化が止まった
+    // 生成の終わり: 停止ボタンが消えた、または停止ボタンが無い画面で最後の回答の字数が止まった
     let done = false;
     if (this.wasGenerating && !generating) {
       done = true;
@@ -267,12 +303,14 @@ export class ChatObserver {
     } else if (
       this.awaitingResponse &&
       !generating &&
+      // 送信した直後の最後の回答は前の回答で、字数がずっと変わっていないので数えない
+      last !== this.sentAssistantEl &&
       lastText.length > 0 &&
       lastText.length !== this.lastAssistantLen &&
-      Date.now() - this.lastMutationAt > QUIET_MS
+      textQuiet
     ) {
       done = true;
-      this.diagnostics.completionMethod = 'quiet_dom';
+      this.diagnostics.completionMethod = 'quiet';
     }
     this.wasGenerating = generating;
 
@@ -285,19 +323,19 @@ export class ChatObserver {
       this.lastResponseDoneAt = Date.now();
       this.diagnostics.lastResponseChars = lastText.length;
       this.diagnostics.lastResponseHead = lastText.slice(0, 24);
-      this.cb.onResponseDone(text, this.lastUserText, continuation);
+      this.cb.onResponseDone(text, this.lastUserText, continuation, this.diagnostics.completionMethod!);
     } else if (
       // 静かになって終わりとみなした後も、同じ回答が伸びたら差分を足す(考える系のモデルは途中で長く止まる)
       !generating &&
       last === this.lastAssistantEl &&
       lastText.length > this.lastAssistantLen &&
-      Date.now() - this.lastMutationAt > QUIET_MS
+      textQuiet
     ) {
       const delta = lastText.slice(this.lastAssistantLen);
       this.lastAssistantLen = lastText.length;
       this.lastResponseDoneAt = Date.now();
       this.diagnostics.lastResponseChars = lastText.length;
-      this.cb.onResponseDone(delta, this.lastUserText, true);
+      this.cb.onResponseDone(delta, this.lastUserText, true, 'quiet');
     }
   };
 }

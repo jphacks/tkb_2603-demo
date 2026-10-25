@@ -9,7 +9,7 @@ import { Pictogram } from './Pictogram';
 import { Icon } from './Icon';
 import { loadFillPercent, loadLevel, loadPercent } from './presentation';
 import { useDockPosition } from './useDockPosition';
-import { needsConsent, PRIVACY_COPY, PRIVACY_POLICY_URL } from '../shared/privacy';
+import { hasClassificationConsent, needsConsent, PRIVACY_COPY, PRIVACY_POLICY_URL } from '../shared/privacy';
 import { useTodayTimerSummary } from './useTodayTimerSummary';
 
 const HIGH_UF = 30;
@@ -166,8 +166,24 @@ function PromptCard({ snap, onAction }: { snap: UiSnapshot; onAction: (action: '
   );
 }
 
+function decisionAvailability(snap: UiSnapshot): { unmeasured: boolean; note: string | null } {
+  if (snap.state.llmAvailable) return { unmeasured: false, note: null };
+  if (!snap.settings.llmEnabled) return { unmeasured: true, note: '判断の分類はオフです。設定から有効にできます。' };
+  if (!hasClassificationConsent({ ...snap.settings, apiKey: '' })) {
+    return { unmeasured: snap.settings.classificationConsent === 'declined', note: '判断の分類は、本文の送信に同意すると始まります。' };
+  }
+  if (snap.settings.classifierMode === 'direct' && !snap.settings.hasApiKey) {
+    return { unmeasured: true, note: '判断の分類には、自分のAPIキーの設定が必要です。' };
+  }
+  if (snap.lastClassify?.ok === false) {
+    return { unmeasured: true, note: '判断を分類できませんでした。読む量や作業時間の計測は続いています。' };
+  }
+  return { unmeasured: false, note: '判断の分類結果を待っています。' };
+}
+
 function Detail({ snap, runner, onClose }: { snap: UiSnapshot; runner: Runner; onClose: () => void }) {
   const timer = useTodayTimerSummary();
+  const decision = decisionAvailability(snap);
   const shares = contributionShares(snap.state);
   const ufFill = Math.min(100, Math.max(0, snap.state.uf));
   const rfFill = Math.min(100 - ufFill, Math.max(0, snap.state.rf));
@@ -203,17 +219,19 @@ function Detail({ snap, runner, onClose }: { snap: UiSnapshot; runner: Runner; o
         <p className="hi-breakdown-hint">各項目は、負担をためた要因の割合です。</p>
         <div className="hi-meters">
           {ELEMENT_KEYS.map((key) => {
-            const unmeasured = key === 'decision' && !snap.state.llmAvailable;
+            const unmeasured = key === 'decision' && decision.unmeasured;
             const percent = Math.round((shares?.[key] ?? 0) * 100);
             return <div className="hi-meter" key={key}>
               <span className="hi-meter-label">{ELEMENT_LABELS[key]}</span>
-              <div className="hi-bar" role="meter" aria-label={ELEMENT_LABELS[key]} aria-valuenow={unmeasured ? undefined : percent} aria-valuetext={unmeasured ? '未計測' : `${percent}%`} aria-valuemin={0} aria-valuemax={100}>
+              <div className="hi-bar" role="meter" aria-label={ELEMENT_LABELS[key]} aria-valuenow={unmeasured ? undefined : percent} aria-valuetext={unmeasured ? '未計測' : `${percent}%`} aria-valuemin={0} aria-valuemax={100}
+                aria-describedby={key === 'decision' && decision.note ? 'hi-decision-status' : undefined}>
                 <div className="hi-bar-fill" style={{ width: `${unmeasured ? 0 : percent}%` }} />
               </div>
               <span className="hi-meter-percent">{unmeasured ? '未計測' : `${percent}%`}</span>
             </div>;
           })}
         </div>
+        {decision.note && <p id="hi-decision-status" className="hi-muted">{decision.note}</p>}
         <details className="hi-history">
           <summary>推移を見る<span className="hi-muted">直近30分</span><Icon name="chevron" /></summary>
           <p className="hi-history-hint">全体の器が、時間とともにどう変わったかを表示します。</p>
@@ -223,7 +241,6 @@ function Detail({ snap, runner, onClose }: { snap: UiSnapshot; runner: Runner; o
         {timer && <p className="hi-muted hi-timer-compare">30 分ごとのタイマーだったら、今日 {timer.ticks} 回のうち {timer.interrupted} 回は入力中か AI の生成中に鳴っていました。ひといきは {timer.prompts} 回、区切りで提案しました。</p>}
         {DEMO && <details className="hi-diagnostics">
           <summary>診断</summary>
-          {!snap.state.llmAvailable && <p className="hi-muted">判断は未計測です。確認・切替は画面から取れる手がかりで計測しています。</p>}
           <Diagnostics snap={snap} />
         </details>}
       </div>
@@ -280,7 +297,7 @@ function trapFocus(event: KeyboardEvent<HTMLElement>) {
 function useModalFocus(ref: RefObject<HTMLDivElement | null>) {
   useEffect(() => {
     const root = ref.current?.getRootNode() as Document | ShadowRoot;
-    const previous = root?.activeElement as HTMLElement | null;
+    const previous = (root?.activeElement ?? document.activeElement) as HTMLElement | null;
     ref.current?.focus({ preventScroll: true });
     return () => { if (previous?.isConnected) previous.focus({ preventScroll: true }); };
   }, [ref]);
@@ -291,7 +308,19 @@ function BreakOverlay({ snap, runner }: { snap: UiSnapshot; runner: Runner }) {
   const stretch = b.stretch ?? 'reach';
   const [now, setNow] = useState(Date.now());
   const modal = useRef<HTMLDivElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
+  const endTrigger = useRef<HTMLElement | null>(null);
+  const wasConfirming = useRef(false);
   useModalFocus(modal);
+  useEffect(() => {
+    if (wasConfirming.current && !snap.confirmEndBreak) (endTrigger.current ?? closeButton.current)?.focus({ preventScroll: true });
+    wasConfirming.current = snap.confirmEndBreak;
+  }, [snap.confirmEndBreak]);
+  const askToEnd = (trigger?: HTMLElement) => {
+    const root = modal.current?.getRootNode() as Document | ShadowRoot;
+    endTrigger.current = trigger ?? root?.activeElement as HTMLElement | null;
+    runner.askEndBreak();
+  };
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(id);
@@ -305,13 +334,14 @@ function BreakOverlay({ snap, runner }: { snap: UiSnapshot; runner: Runner }) {
   return (
     <div className="hi-overlay">
       <div ref={modal} className="hi-card hi-break" role="dialog" aria-modal="true" aria-label="休憩中" tabIndex={-1}
+        inert={snap.confirmEndBreak} aria-hidden={snap.confirmEndBreak || undefined}
         onKeyDown={(event) => {
           trapFocus(event);
-          if (event.key === 'Escape') { event.stopPropagation(); snap.confirmEndBreak ? runner.cancelEndBreak() : runner.askEndBreak(); }
+          if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); askToEnd(); }
         }}>
         <header className="hi-head hi-break-head">
           <div className="hi-heading"><Icon name="leaf" /><h2>休憩中</h2></div>
-          <button className="hi-icon-btn" onClick={() => runner.askEndBreak()} aria-label="休憩を終える"><Icon name="close" /></button>
+          <button ref={closeButton} className="hi-icon-btn" onClick={(event) => askToEnd(event.currentTarget)} aria-label="休憩を終える"><Icon name="close" /></button>
         </header>
         <div className="hi-timer">
           <svg className="hi-timer-ring" width="232" height="232" viewBox="0 0 232 232" aria-hidden="true">
@@ -327,11 +357,29 @@ function BreakOverlay({ snap, runner }: { snap: UiSnapshot; runner: Runner }) {
           <summary>復帰メモ<Icon name="chevron" /></summary>
           <label className="hi-memo-field">戻ったらやること<input className="hi-input" placeholder="例：テスト結果を確認する" value={b.memo} maxLength={80} onChange={(event) => runner.setMemo(event.target.value)} /></label>
         </details>
-        <button className="hi-btn hi-full hi-end-break" onClick={() => runner.askEndBreak()}>休憩を終える</button>
-        {snap.confirmEndBreak && <div className="hi-confirm" role="group" aria-label="休憩終了の確認"><p>休憩を終えますか？</p><div className="hi-actions"><button className="hi-btn hi-primary" onClick={() => runner.endBreakEarly()}>終える</button><button className="hi-btn" onClick={() => runner.cancelEndBreak()}>続ける</button></div></div>}
+        <button className="hi-btn hi-full hi-end-break" onClick={(event) => askToEnd(event.currentTarget)}>休憩を終える</button>
       </div>
+      {snap.confirmEndBreak && <EndBreakConfirmation runner={runner} />}
     </div>
   );
+}
+
+function EndBreakConfirmation({ runner }: { runner: Runner }) {
+  const keepResting = useRef<HTMLButtonElement>(null);
+  useEffect(() => { keepResting.current?.focus({ preventScroll: true }); }, []);
+  return <div className="hi-confirm-overlay">
+    <div className="hi-card hi-confirm" role="alertdialog" aria-modal="true" aria-labelledby="hi-confirm-title"
+      onKeyDown={(event) => {
+        trapFocus(event);
+        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); runner.cancelEndBreak(); }
+      }}>
+      <h2 id="hi-confirm-title">休憩を終えますか？</h2>
+      <div className="hi-actions">
+        <button className="hi-btn hi-primary" onClick={() => runner.endBreakEarly()}>終える</button>
+        <button ref={keepResting} className="hi-btn" onClick={() => runner.cancelEndBreak()}>続ける</button>
+      </div>
+    </div>
+  </div>;
 }
 
 function Welcome({ snap, runner }: { snap: UiSnapshot; runner: Runner }) {
