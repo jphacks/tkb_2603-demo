@@ -11,9 +11,8 @@
 
 # ひといき
 
-[![IMAGE ALT TEXT HERE](https://jphacks.com/wp-content/uploads/2026/07/IMG_5316.png)](https://www.youtube.com/watch?v=piaNsc6ilBI)
+[![ひといき デモ動画](https://img.youtube.com/vi/dvJNsERvyCA/hqdefault.jpg)](https://www.youtube.com/watch?v=dvJNsERvyCA)
 
-<!-- デモ動画ができたら、上の画像と YouTube の URL を差し替える -->
 
 ## 製品概要
 ### 背景(製品開発のきっかけ、課題等）
