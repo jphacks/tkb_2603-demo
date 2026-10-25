@@ -27,6 +27,7 @@ const runner = {
   respondToPrompt: vi.fn(), startManualBreak: vi.fn(), startDeferredBreak: vi.fn(), openOptions: vi.fn(),
   setMemo: vi.fn(), askEndBreak: vi.fn(), cancelEndBreak: vi.fn(), endBreakEarly: vi.fn(),
   sendFeedback: vi.fn(), dismissFinished: vi.fn(),
+  setClassificationConsent: vi.fn().mockResolvedValue(undefined),
   // 位置合わせは本物の読み取り(ChatGPT の定義)で入力欄の外枠を探す
   composerContainer: () => new ChatObserver(CHATGPT, { onPromptSent() {}, onResponseDone() {}, onErrorPaste() {}, onConversationSwitch() {}, onActivity() {} }).composerContainer(),
 };
@@ -70,6 +71,17 @@ describe.each([false, true])('DEMO = %s', (demo) => {
   });
 
   describe('画像に合わせたUIの操作', () => {
+  it('初回に本文の送信先を説明し、同意とローカルのみの選択を扱う', async () => {
+    expect(container.querySelector('[aria-label="会話の分類について"]')?.textContent).toContain('中継サーバー');
+    await click('ローカル計測だけ使う');
+    expect(runner.setClassificationConsent).toHaveBeenLastCalledWith(false);
+    await click('同意して使う');
+    expect(runner.setClassificationConsent).toHaveBeenLastCalledWith(true);
+    snap = { ...snap, settings: { ...snap.settings, classificationConsent: 'accepted', classificationConsentVersion: 1 } };
+    await publish();
+    expect(container.querySelector('[aria-label="会話の分類について"]')).toBeNull();
+  });
+
     it('詳細の開閉、設定、手動休憩をつなぎ、閉じたらページ幅を戻す', async () => {
       await click('作業モニターを開く');
       expect(container.querySelectorAll('[role="meter"]')).toHaveLength(6);

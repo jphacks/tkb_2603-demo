@@ -2,68 +2,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { ClassifyResult } from './messages';
 
-const SYSTEM = `You classify one developer–AI exchange from an AI chat service (ChatGPT, Claude, or Gemini). Use ONLY the definitions below.
-Do not infer events that are not explicitly supported by the text.
-
-DECISION_REQUEST: each independent point where the ASSISTANT asks the user to choose, approve, or decide
-(e.g. "Which do you prefer, React or Vue?", "Shall I proceed with this approach?"). Do not count requests for factual information.
-
-VERIFICATION_EVENT: each independent event in the USER message where the user reports an error/failure,
-says something does not work after trying it, asks whether something is correct, or asks to verify a test/result.
-Types: error_report (pasted error/stack trace), failure_after_attempt ("I tried it but it doesn't work"),
-correctness_check ("Is this right?"), test_or_result_check ("Does this test result mean success?").
-Do not count a first-time request or "tell me more".
-
-TOPIC_SHIFT: true only if the USER message starts an independent new goal, unrelated to PREVIOUS_TASK.
-Refinements, debugging, clarification, and implementation subtasks of the previous goal are NOT topic shifts.
-If PREVIOUS_TASK is empty, shift is false.
-Also return current_task: a short (max 15 words) description of the current goal, in the user's language.
-
-Return only the schema-constrained JSON.`;
-
-const SCHEMA = {
-  type: 'object',
-  properties: {
-    decision_requests: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: { span: { type: 'string' } },
-        required: ['span'],
-        additionalProperties: false,
-      },
-    },
-    verification_events: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          type: {
-            type: 'string',
-            enum: ['error_report', 'failure_after_attempt', 'correctness_check', 'test_or_result_check'],
-          },
-        },
-        required: ['type'],
-        additionalProperties: false,
-      },
-    },
-    topic_shift: {
-      type: 'object',
-      properties: { shift: { type: 'boolean' }, current_task: { type: 'string' } },
-      required: ['shift', 'current_task'],
-      additionalProperties: false,
-    },
-  },
-  required: ['decision_requests', 'verification_events', 'topic_shift'],
-  additionalProperties: false,
-} as const;
-
-/** 1 往復が長すぎるときは先頭と末尾を残す(判断の要求は回答の末尾に出やすい) */
-function clip(text: string, max: number): string {
-  if (text.length <= max) return text;
-  const head = Math.floor(max * 0.4);
-  return `${text.slice(0, head)}\n…(中略 ${text.length - max} 文字)…\n${text.slice(-(max - head))}`;
-}
+import { CLASSIFICATION_SYSTEM as SYSTEM, CLASSIFICATION_SCHEMA as SCHEMA, clip, isClassifyResult } from './classification';
 
 /** サーバー側のフォールバックを使える(Opus 5.5 / Sonnet 5.5)。Haiku 5.5 には無い */
 const FALLBACK_MODELS = new Set(['claude-opus-5-5', 'claude-sonnet-5-5']);
@@ -74,6 +13,7 @@ export async function classifyExchange(opts: {
   userText: string;
   assistantText: string;
   previousTask: string;
+  signal?: AbortSignal;
 }): Promise<{ result: ClassifyResult; inputTokens: number; outputTokens: number }> {
   const client = new Anthropic({
     apiKey: opts.apiKey,
@@ -103,15 +43,17 @@ export async function classifyExchange(opts: {
         ...base,
         betas: ['server-side-fallback-2026-07-01'],
         fallbacks: 'default',
-      })
-    : await client.messages.create(base);
+      }, { signal: opts.signal })
+    : await client.messages.create(base, { signal: opts.signal });
 
   if (response.stop_reason === 'refusal') throw new Error('refusal');
   if (response.stop_reason === 'max_tokens') throw new Error('truncated');
   const text = response.content.find((b) => b.type === 'text');
   if (!text || text.type !== 'text') throw new Error('no text block');
+  const result: unknown = JSON.parse(text.text);
+  if (!isClassifyResult(result)) throw new Error('invalid_result');
   return {
-    result: JSON.parse(text.text) as ClassifyResult,
+    result,
     inputTokens: response.usage.input_tokens,
     outputTokens: response.usage.output_tokens,
   };

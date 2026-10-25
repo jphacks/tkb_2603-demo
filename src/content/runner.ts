@@ -25,10 +25,12 @@ import {
   onSettingsChanged,
   paramsFrom,
   saveEngine,
+  saveSettings,
   type Settings,
 } from '../shared/settings';
 import { ChatObserver } from './observer';
 import { detectSite } from './sites';
+import { canClassify, CONSENT_VERSION } from '../shared/privacy';
 
 export interface PromptInfo {
   load: number;
@@ -70,6 +72,7 @@ export class Runner {
   private finishedBreak: FinishedBreak | null = null;
   private confirmEndBreak = false;
   private previousTask = '';
+  private classificationEpoch = 0;
   private lastClassify: UiSnapshot['lastClassify'] = null;
   private breakTopAtStart: ElementKey | null = null;
   private readonly tabId = Math.random().toString(36).slice(2);
@@ -101,7 +104,7 @@ export class Runner {
     const saved = await loadEngine();
     this.state = saved.state;
     this.lastTickReal = saved.lastTickReal ?? saved.realSavedAt;
-    this.state.llmAvailable = this.settings.llmEnabled && !!this.settings.apiKey;
+    this.state.llmAvailable = false;
     onSettingsChanged((s) => {
       const speedChanged = s.speed !== this.settings.speed;
       // 倍速を切り替える前に、今までの分を元の速さで進めておく(切り替えた瞬間に跳ねないように)
@@ -110,7 +113,10 @@ export class Runner {
         this.lastTickReal = Date.now();
       }
       this.settings = s;
-      this.state.llmAvailable = s.llmEnabled && !!s.apiKey;
+      this.classificationEpoch++;
+      this.previousTask = '';
+      this.lastClassify = null;
+      this.state.llmAvailable = false;
       if (speedChanged) this.restartTick();
       this.emit();
     });
@@ -428,14 +434,17 @@ export class Runner {
   }
 
   private async classify(userText: string, assistantText: string): Promise<void> {
-    if (!this.settings.enabled || !this.settings.llmEnabled || !this.settings.apiKey) return;
+    if (!canClassify(this.settings)) return;
+    const epoch = this.classificationEpoch;
     const req: ClassifyRequest = { type: 'classify', userText, assistantText, previousTask: this.previousTask };
     let res: ClassifyResponse;
     try {
       res = await browser.runtime.sendMessage(req);
-    } catch (e) {
-      res = { ok: false, error: e instanceof Error ? e.message : String(e), model: this.settings.model, ms: 0 };
+    } catch {
+      res = { ok: false, error: 'classification_unavailable', model: this.settings.classifierMode === 'proxy' ? 'proxy' : this.settings.model, ms: 0 };
     }
+    // 同意の取消・停止・接続先の変更より前に始まった応答を適用しない。
+    if (!canClassify(this.settings) || epoch !== this.classificationEpoch) return;
     this.lastClassify = res.ok
       ? { ok: true, model: res.model, ms: res.ms }
       : { ok: false, model: res.model, ms: res.ms, error: res.error };
@@ -469,6 +478,15 @@ export class Runner {
         shift: r.topic_shift.shift,
       },
     });
+    this.emit();
+  }
+
+  async setClassificationConsent(accepted: boolean): Promise<void> {
+    this.settings = await saveSettings({ classificationConsent: accepted ? 'accepted' : 'declined', classificationConsentVersion: CONSENT_VERSION });
+    this.classificationEpoch++;
+    this.previousTask = '';
+    this.lastClassify = null;
+    this.state.llmAvailable = false;
     this.emit();
   }
 }

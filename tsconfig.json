@@ -4,5 +4,5 @@
     "allowImportingTsExtensions": true,
     "jsx": "react-jsx"
   },
-  "exclude": ["vscode", "node_modules", ".output"]
+  "exclude": ["proxy", "vscode", "node_modules", ".output"]
 }

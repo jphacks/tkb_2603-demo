@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, expect, it, vi } from 'vitest';
 import { appendLog, loadSettings, saveSettings } from './settings';
+import { canClassify, CONSENT_VERSION } from './privacy';
 
 afterEach(() => vi.unstubAllGlobals());
 it('以前の自動タイマー設定も、ほかの設定を保って通知方式に移行する', async () => {
@@ -16,6 +17,20 @@ it('以前の自動タイマー設定も、ほかの設定を保って通知方�
   expect(settings.llmEnabled).toBe(false);
   await saveSettings({ speed: 30 });
   expect(set).toHaveBeenCalledWith({ 'hitoiki:settings': { ...settings, speed: 30 } });
+});
+
+it('既存キーを保持して直接接続へ移行するが、改めて同意するまでは送信しない', async () => {
+  const store: Record<string, unknown> = { 'hitoiki:settings': { apiKey: 'test-key', model: 'claude-existing', threshold: 95 } };
+  vi.stubGlobal('browser', { storage: { local: {
+    get: vi.fn(async (key: string) => ({ [key]: store[key] })),
+    set: vi.fn(async (value: Record<string, unknown>) => { Object.assign(store, value); }),
+  } } });
+  const old = await loadSettings();
+  expect(old.classifierMode).toBe('direct'); expect(old.apiKey).toBe('test-key');
+  expect(old.threshold).toBe(95); expect(canClassify(old)).toBe(false);
+  const accepted = await saveSettings({ classificationConsent: 'accepted', classificationConsentVersion: CONSENT_VERSION });
+  expect(canClassify(accepted)).toBe(true);
+  expect(canClassify(await saveSettings({ classificationConsent: 'declined' }))).toBe(false);
 });
 
 it('記録を同時にいくつ足しても消えない(書き込みを順番に流す)', async () => {

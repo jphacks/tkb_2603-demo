@@ -1,0 +1,12 @@
+{
+  "name": "hitoiki-proxy-local-test",
+  "main": "test/local-worker.ts",
+  "compatibility_date": "2026-10-24",
+  "observability": { "enabled": false, "logs": { "enabled": false, "invocation_logs": false } },
+  "durable_objects": { "bindings": [{ "name": "QUOTA_LIMITER", "class_name": "QuotaLimiter" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["QuotaLimiter"] }],
+  "vars": {
+    "CLASSIFICATION_ENABLED": "true", "ANTHROPIC_MODEL": "claude-test", "ANTHROPIC_API_KEY": "test-only-not-a-real-key",
+    "INSTALL_DAILY_LIMIT": "2", "GLOBAL_DAILY_LIMIT": "5", "INSTALL_MINUTE_LIMIT": "2", "GLOBAL_MINUTE_LIMIT": "5"
+  }
+}

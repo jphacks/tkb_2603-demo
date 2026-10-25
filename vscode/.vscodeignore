@@ -1,4 +1,4 @@
-# .vsix に入れるのは dist/extension.js と package.json・README だけ
+# .vsix に入れるのは dist/extension.js・package.json・README・LICENSE・CHANGELOG・images/icon.png だけ
 src/**
 test/**
 node_modules/**
@@ -9,3 +9,5 @@ vitest.config.*
 **/*.map
 **/*.test.ts
 .gitignore
+DEVELOPMENT.md
+package-lock.json

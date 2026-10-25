@@ -2,7 +2,7 @@
   "name": "hitoiki",
   "description": "ChatGPT での作業の中身から負担の目安を計算して、区切りで休憩を提案する Chrome 拡張",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "wxt",

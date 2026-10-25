@@ -48,7 +48,7 @@ exports.run = async function run() {
 };
 
 async function main() {
-  const ext = vscode.extensions.getExtension('hitoiki.hitoiki-vscode');
+  const ext = vscode.extensions.getExtension('koubeyapurin.hitoiki');
   const api = await ext.activate();
   const config = vscode.workspace.getConfiguration('hitoiki');
   // 120 倍速: 実時間 1 秒で計算上の 2 分

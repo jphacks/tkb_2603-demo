@@ -1,11 +1,27 @@
 {
-  "name": "hitoiki-vscode",
-  "displayName": "ひといき(VS Code 試作)",
-  "description": "VS Code での作業の中身から負担の目安を計算して、区切りで休憩を提案する(Chrome 拡張と同じ計算)",
-  "version": "0.0.0",
-  "publisher": "hitoiki",
-  "private": true,
+  "name": "hitoiki",
+  "displayName": "ひといき",
+  "description": "AI と一緒に開発する作業の中身(コマンドやテストの失敗、まとまった挿入、ファイルの切替)から脳にかかる負担の目安をため、区切りのいいところでひと休みを提案します。",
+  "version": "1.0.0",
+  "publisher": "koubeyapurin",
   "license": "MIT",
+  "icon": "images/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jphacks/tkb_2603.git",
+    "directory": "vscode"
+  },
+  "homepage": "https://github.com/jphacks/tkb_2603/tree/main/vscode#readme",
+  "bugs": {
+    "url": "https://github.com/jphacks/tkb_2603/issues"
+  },
+  "keywords": [
+    "休憩",
+    "break",
+    "focus",
+    "AI",
+    "認知負荷"
+  ],
   "engines": {
     "vscode": "^1.93.0"
   },

@@ -9,6 +9,7 @@ import { Pictogram } from './Pictogram';
 import { Icon } from './Icon';
 import { loadFillPercent, loadLevel, loadPercent } from './presentation';
 import { useDockPosition } from './useDockPosition';
+import { needsConsent, PRIVACY_COPY, PRIVACY_POLICY_URL } from '../shared/privacy';
 import { useTodayTimerSummary } from './useTodayTimerSummary';
 
 const HIGH_UF = 30;
@@ -56,6 +57,7 @@ export function App({ runner }: { runner: Runner }) {
       {snap.finishedBreak && !onBreak && !panelOpen && <Welcome snap={snap} runner={runner} />}
       {panelOpen && <Detail snap={snap} runner={runner} onClose={closePanel} />}
       {toast && <div className="hi-toast" role="status">{toast}</div>}
+      {!onBreak && needsConsent({ ...snap.settings, apiKey: '' }) && <ConsentNotice runner={runner} />}
       {!onBreak && !panelOpen && (
         <Dock snap={snap} runner={runner} pill={pill} onOpen={() => setOpen(true)} collapsed={monitorCollapsed}
           onToggleCollapse={() => {
@@ -65,6 +67,26 @@ export function App({ runner }: { runner: Runner }) {
       )}
     </div>
   );
+}
+
+function ConsentNotice({ runner }: { runner: Runner }) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(false);
+  const respond = async (accepted: boolean) => {
+    setSaving(true);
+    setError(false);
+    try { await runner.setClassificationConsent(accepted); }
+    catch { setError(true); }
+    finally { setSaving(false); }
+  };
+  return <section className="hi-card hi-consent" aria-label="会話の分類について">
+    <h2>会話の分類を使いますか？</h2>
+    <p>{PRIVACY_COPY}</p>
+    <p>同意しなくても、読む量や作業時間などのローカル計測は使えます。</p>
+    <a href={PRIVACY_POLICY_URL} target="_blank" rel="noreferrer">Anthropicのデータポリシー</a>
+    <div className="hi-actions"><button className="hi-btn hi-primary" disabled={saving} onClick={() => void respond(true)}>同意して使う</button><button className="hi-btn" disabled={saving} onClick={() => void respond(false)}>ローカル計測だけ使う</button></div>
+    {error && <p role="alert">保存できませんでした。もう一度お試しください。</p>}
+  </section>;
 }
 
 function Dock({ snap, runner, pill, onOpen, collapsed, onToggleCollapse }: {

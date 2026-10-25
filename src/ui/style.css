@@ -101,6 +101,11 @@
 .hi-pill .hi-icon-chevron { width: 12px; height: 12px; }
 .hi-demo { position: fixed; left: 16px; bottom: 16px; z-index: 2147483004; padding: 4px 12px; border: 1px solid var(--hi-prompt-border); border-radius: 20px; color: var(--hi-prompt-icon); background: var(--hi-prompt-bg); font-size: 11px; pointer-events: none; }
 .hi-card { border: 1px solid var(--hi-border); border-radius: 18px; background: var(--hi-bg); box-shadow: var(--hi-shadow); }
+.hi-consent { position: fixed; top: 24px; left: 50%; transform: translateX(-50%); z-index: 2147483006; width: 440px; max-width: calc(100% - 32px); max-height: calc(100dvh - 48px); overflow-y: auto; padding: 20px; }
+.hi-consent h2 { font-size: 16px; }
+.hi-consent p { margin-top: 12px; font-size: 12px; }
+.hi-consent a { display: inline-block; margin-top: 8px; color: var(--hi-accent); font-size: 12px; }
+.hi-root button:disabled { cursor: wait; opacity: .6; }
 .hi-prompt, .hi-welcome { position: fixed; right: 24px; bottom: 150px; z-index: 2147483001; width: 392px; max-width: calc(100% - 32px); padding: 20px; }
 .hi-prompt { top: 80px; bottom: auto; min-height: 176px; max-height: calc(100dvh - 104px); overflow-y: auto; border-color: var(--hi-prompt-border); background: var(--hi-prompt-bg); border-radius: 16px; }
 .hi-prompt .hi-heading > .hi-icon { color: var(--hi-prompt-icon); }

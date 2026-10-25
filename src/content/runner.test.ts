@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { initialState } from '../core/types';
-import { DEFAULT_SETTINGS, loadEngine, loadSettings, saveEngine, onEngineChanged, appendLog, drainInbox } from '../shared/settings';
+import { DEFAULT_SETTINGS, loadEngine, loadSettings, saveEngine, onEngineChanged, onSettingsChanged, appendLog, drainInbox } from '../shared/settings';
 import { Runner, type UiSnapshot } from './runner';
 
 vi.mock('../shared/settings', async (original) => ({
@@ -11,6 +11,7 @@ vi.mock('../shared/settings', async (original) => ({
 }));
 vi.mock('./observer', () => ({
   ChatObserver: class {
+    constructor(_site: unknown, callbacks: typeof observerCallbacks) { observerCallbacks = callbacks; }
     site = { id: 'chatgpt' };
     composerContainer() { return null; }
     diagnostics = { site: 'chatgpt', matched: {}, assistantCount: 0, userCount: 0, generating: false, lastResponseChars: 0, lastResponseHead: '', completionMethod: null };
@@ -21,6 +22,8 @@ vi.mock('./observer', () => ({
     composerText() { return ''; }
   },
 }));
+
+let observerCallbacks: { onResponseDone(text: string, user: string, continuation: boolean): void };
 
 let snap: UiSnapshot;
 let unsubscribe: () => void;
@@ -38,6 +41,37 @@ afterEach(() => {
   vi.clearAllTimers();
   vi.useRealTimers();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
+it('同意後は個人キーなしでも分類し、障害時には読む量などのローカル計測を保つ', async () => {
+  vi.mocked(loadSettings).mockResolvedValue({ ...DEFAULT_SETTINGS, classificationConsent: 'accepted', classificationConsentVersion: 1 });
+  const sendMessage = vi.fn().mockResolvedValue({ ok: false, error: 'proxy_rate_limited', model: 'proxy', ms: 0 });
+  vi.stubGlobal('browser', { runtime: { sendMessage } });
+  const runner = new Runner(); await runner.start();
+  unsubscribe = runner.subscribe((value) => { snap = value; });
+  observerCallbacks.onResponseDone('テスト'.repeat(300), '質問', false);
+  await Promise.resolve(); await Promise.resolve();
+  expect(sendMessage).toHaveBeenCalledOnce();
+  expect(snap.state.readBacklogMin).toBeGreaterThan(0);
+  expect(snap.state.llmAvailable).toBe(false);
+});
+
+it('同意を取り消す前に開始した遅い分類結果を反映しない', async () => {
+  const accepted = { ...DEFAULT_SETTINGS, classificationConsent: 'accepted' as const, classificationConsentVersion: 1 };
+  vi.mocked(loadSettings).mockResolvedValue(accepted);
+  let resolve!: (value: unknown) => void;
+  vi.stubGlobal('browser', { runtime: { sendMessage: vi.fn(() => new Promise((done) => { resolve = done; })) } });
+  const runner = new Runner(); await runner.start();
+  unsubscribe = runner.subscribe((value) => { snap = value; });
+  observerCallbacks.onResponseDone('回答', '質問', false);
+  vi.mocked(onSettingsChanged).mock.calls.at(-1)![0]({ ...accepted, classificationConsent: 'declined' });
+  resolve({ ok: true, result: { decision_requests: [{ span: 'choose' }], verification_events: [], topic_shift: { shift: true, current_task: 'private' } }, model: 'test', ms: 1, inputTokens: 1, outputTokens: 1 });
+  await Promise.resolve(); await Promise.resolve();
+  expect(snap.state.llmAvailable).toBe(false);
+  expect(snap.state.recent.decision).toHaveLength(0);
+  expect(snap.lastClassify).toBeNull();
+  expect(vi.mocked(appendLog).mock.calls.some(([entry]) => entry.type === 'observation' && entry.kind === 'classified')).toBe(false);
 });
 
 describe('休憩の開始をユーザーに任せる', () => {

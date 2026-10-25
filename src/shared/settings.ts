@@ -1,6 +1,7 @@
 // 設定と保存。chrome.storage.local に置く(自分たちだけで使う前提。キーは暗号化されない)。
 import type { NotifyMode } from '../core/gate';
 import { DEFAULT_PARAMS, type EngineState, initialState, type ModelParams, type Observation } from '../core/types';
+import { CONSENT_VERSION } from './privacy';
 
 export const CLASSIFIER_MODELS = [
   { id: 'claude-opus-5-5', label: 'Claude Opus 5.5(既定)' },
@@ -23,6 +24,9 @@ export interface Settings {
   speed: number;
   /** LLM で会話を分類するか(本文を API に送る) */
   llmEnabled: boolean;
+  classifierMode: 'proxy' | 'direct';
+  classificationConsent: 'pending' | 'accepted' | 'declined';
+  classificationConsentVersion: number;
   apiKey: string;
   model: string;
 }
@@ -35,6 +39,9 @@ export const DEFAULT_SETTINGS: Settings = {
   g: DEFAULT_PARAMS.g,
   speed: 1,
   llmEnabled: true,
+  classifierMode: 'proxy',
+  classificationConsent: 'pending',
+  classificationConsentVersion: 0,
   apiKey: '',
   model: 'claude-opus-5-5',
 };
@@ -50,13 +57,22 @@ const KEYS = {
   inbox: 'hitoiki:inbox',
 } as const;
 
+function normalizeSettings(raw: Partial<Settings> = {}): Settings {
+  const settings: Settings = { ...DEFAULT_SETTINGS, ...raw, mode: 'notify' };
+  // 旧ユーザーのキーは保存し、明示的な同意後に従来の接続方式を使えるようにする。
+  settings.classifierMode = raw.classifierMode === 'direct' || (!raw.classifierMode && !!raw.apiKey) ? 'direct' : 'proxy';
+  if (settings.classificationConsentVersion !== CONSENT_VERSION) settings.classificationConsent = 'pending';
+  if (!['pending', 'accepted', 'declined'].includes(settings.classificationConsent)) settings.classificationConsent = 'pending';
+  return settings;
+}
+
 export async function loadSettings(): Promise<Settings> {
   const got = await browser.storage.local.get(KEYS.settings);
-  return { ...DEFAULT_SETTINGS, ...(got[KEYS.settings] as Partial<Settings> | undefined), mode: 'notify' };
+  return normalizeSettings(got[KEYS.settings] as Partial<Settings> | undefined);
 }
 
 export async function saveSettings(patch: Partial<Settings>): Promise<Settings> {
-  const next: Settings = { ...(await loadSettings()), ...patch, mode: 'notify' };
+  const next = normalizeSettings({ ...(await loadSettings()), ...patch });
   await browser.storage.local.set({ [KEYS.settings]: next });
   return next;
 }
@@ -65,11 +81,27 @@ export function onSettingsChanged(cb: (s: Settings) => void): () => void {
   const listener = (changes: Record<string, { newValue?: unknown }>, area: string) => {
     const change = changes[KEYS.settings];
     if (area === 'local' && change) {
-      cb({ ...DEFAULT_SETTINGS, ...(change.newValue as Partial<Settings>), mode: 'notify' });
+      cb(normalizeSettings(change.newValue as Partial<Settings>));
     }
   };
   browser.storage.onChanged.addListener(listener);
   return () => browser.storage.onChanged.removeListener(listener);
+}
+
+let installationIdPromise: Promise<string> | undefined;
+/** background内で一度だけ生成し、並列の分類でも同じIDを使う。本文とは分けて保存。 */
+export function getInstallationId(): Promise<string> {
+  if (!installationIdPromise) {
+    installationIdPromise = (async () => {
+      const key = 'hitoiki:installationId';
+      const saved = (await browser.storage.local.get(key))[key];
+      if (typeof saved === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(saved)) return saved;
+      const id = crypto.randomUUID();
+      await browser.storage.local.set({ [key]: id });
+      return id;
+    })().catch((error) => { installationIdPromise = undefined; throw error; });
+  }
+  return installationIdPromise;
 }
 
 /** 器の状態。realSavedAt は保存した実時刻(ms)。開き直した時に経過時間を計算するため */
