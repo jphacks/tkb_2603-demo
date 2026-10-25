@@ -12,6 +12,7 @@ import { CONSENT_VERSION, hasClassificationConsent, PRIVACY_COPY, PRIVACY_POLICY
 import { PROXY_URL, proxyOrigin } from '../../src/shared/proxy-url';
 import { DEFAULT_PARAMS } from '../../src/core/types';
 import { DEMO } from '../../src/shared/flags';
+import { DEMO_SETTINGS } from '../../src/shared/demoStates';
 import { DemoStateButtons } from './DemoStates';
 
 export function Options() {
@@ -147,7 +148,7 @@ export function Options() {
           </select>
         </label>
         <p className="muted">本物と同じ計算を、時計だけ速めて動かします。画面に「デモ: ○倍速」と出ます。</p>
-        <DemoStateButtons />
+        <DemoStateButtons onPrepare={() => update(DEMO_SETTINGS)} />
       </section>}
     </main>
   );

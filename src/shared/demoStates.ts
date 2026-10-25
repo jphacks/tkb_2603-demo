@@ -6,9 +6,21 @@ export type DemoStateId = 'empty' | 'near' | 'before_break';
 
 export const DEMO_STATES: { id: DemoStateId; label: string; hint: string }[] = [
   { id: 'empty', label: '器 0 から', hint: '何もたまっていない状態' },
-  { id: 'near', label: '器 75% から', hint: 'すぐ提案が出る手前' },
+  { id: 'near', label: '器 75% から', hint: '1 往復すると提案が出る手前' },
   { id: 'before_break', label: '休憩の直前', hint: '80% を超えて、区切りを待っている' },
 ];
+
+/**
+ * 30 秒のデモ用の設定。30 倍速(計算上の 1 分 = 実時間 2 秒)で、器 75% から 1 往復すると区切りで提案が出る。
+ * 休憩は短め(5 分 = 実時間 10 秒)にして、おかえりまで見せられるようにする。しきい値と g は本物のまま。
+ * VS Code 版もこのファイルを読むので、settings.ts(browser に依存)の型は参照しない
+ */
+export const DEMO_SETTINGS = {
+  speed: 30,
+  breakScale: 0.5,
+  threshold: DEFAULT_PARAMS.threshold,
+  g: DEFAULT_PARAMS.g,
+};
 
 /** 器の量(RF + UF)を、core と同じ割合(rho)で 2 層に分ける */
 function fill(load: number): Pick<EngineState, 'rf' | 'uf'> {
@@ -35,7 +47,8 @@ export function demoState(id: DemoStateId, current: EngineState): EngineState {
     llmAvailable: current.llmAvailable,
   };
   if (id === 'empty') return base;
-  if (id === 'near') return { ...base, ...fill(75), contribSinceBreak: contrib(75), recent: { ...base.recent, verification: [t, t] } };
+  // 直近の出来事は持たせない(持たせると倍速では送信の前に 80% を超えてしまう)。内訳だけ残す
+  if (id === 'near') return { ...base, ...fill(75), contribSinceBreak: contrib(75) };
   // 80% を超えている。読む残りを少し残し、計算上 2 分ほどで区切りになる
   return { ...base, ...fill(84), contribSinceBreak: contrib(84), readBacklogMin: 2, recent: { ...base.recent, verification: [t, t] } };
 }

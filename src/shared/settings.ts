@@ -1,6 +1,8 @@
 // 設定と保存。chrome.storage.local に置く(自分たちだけで使う前提。キーは暗号化されない)。
 import type { NotifyMode } from '../core/gate';
 import { DEFAULT_PARAMS, type EngineState, initialState, type ModelParams, type Observation } from '../core/types';
+import { DEMO_SETTINGS } from './demoStates';
+import { DEMO } from './flags';
 import { CONSENT_VERSION } from './privacy';
 
 export const CLASSIFIER_MODELS = [
@@ -31,13 +33,14 @@ export interface Settings {
   model: string;
 }
 
+// デモ repo(DEMO = true)では、入れた直後から 30 秒のデモ用の速さで動く。保存済みの設定があればそちらが優先
 export const DEFAULT_SETTINGS: Settings = {
   enabled: true,
   mode: 'notify',
   threshold: DEFAULT_PARAMS.threshold,
-  breakScale: 1,
+  breakScale: DEMO ? DEMO_SETTINGS.breakScale : 1,
   g: DEFAULT_PARAMS.g,
-  speed: 1,
+  speed: DEMO ? DEMO_SETTINGS.speed : 1,
   llmEnabled: true,
   classifierMode: 'proxy',
   classificationConsent: 'pending',
